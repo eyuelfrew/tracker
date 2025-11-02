@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import { useHabits, useJournal, useFinance } from '../hooks/useApi'
 import { Target, BookOpen, DollarSign, TrendingUp, Calendar, Flame, Plus, Check, AlertCircle } from 'lucide-react'
 
 const Dashboard = () => {
     const { state } = useAuth()
+    const { showSuccess, showError } = useToast()
     const habitsApi = useHabits()
     const journalApi = useJournal()
     const financeApi = useFinance()
@@ -78,6 +80,7 @@ const Dashboard = () => {
                 await habitsApi.uncompleteHabit(habitId)
             } else {
                 await habitsApi.completeHabit(habitId)
+                showSuccess('Great Job!', `You completed "${habit.title}" today! 🎉`)
             }
 
             // Refresh habits data
@@ -89,12 +92,15 @@ const Dashboard = () => {
             setHabitStats(updatedStats)
         } catch (error: any) {
             console.error('Error toggling habit:', error)
-            setError(error.message || 'Failed to update habit')
+            showError('Update Failed', error.message || 'Failed to update habit. Please try again.')
         }
     }
 
     const addHabit = async () => {
-        if (!newHabit.trim()) return
+        if (!newHabit.trim()) {
+            showError('Empty Habit', 'Please enter a habit name.')
+            return
+        }
 
         try {
             await habitsApi.createHabit({
@@ -113,14 +119,18 @@ const Dashboard = () => {
 
             setNewHabit('')
             setShowAddHabit(false)
+            showSuccess('Habit Added!', `"${newHabit}" has been added to your habits.`)
         } catch (error: any) {
             console.error('Error adding habit:', error)
-            setError(error.message || 'Failed to add habit')
+            showError('Failed to Add Habit', error.message || 'Could not add habit. Please try again.')
         }
     }
 
     const saveJournalEntry = async () => {
-        if (!journalEntry.trim()) return
+        if (!journalEntry.trim()) {
+            showError('Empty Entry', 'Please write something before saving your journal entry.')
+            return
+        }
 
         try {
             await journalApi.createEntry({
@@ -130,13 +140,14 @@ const Dashboard = () => {
             })
 
             setJournalEntry('')
+            showSuccess('Journal Saved!', 'Your journal entry has been saved successfully.')
 
             // Refresh journal stats
             const updatedStats = await journalApi.getJournalStats()
             setJournalStats(updatedStats)
         } catch (error: any) {
             console.error('Error saving journal entry:', error)
-            setError(error.message || 'Failed to save journal entry')
+            showError('Save Failed', error.message || 'Failed to save journal entry. Please try again.')
         }
     }
 
@@ -344,8 +355,8 @@ const Dashboard = () => {
                                         <button
                                             onClick={() => toggleHabit(habit._id)}
                                             className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isHabitCompletedToday(habit)
-                                                    ? 'bg-green-500 border-green-500 text-white'
-                                                    : 'border-gray-300 dark:border-gray-600 hover:border-green-500'
+                                                ? 'bg-green-500 border-green-500 text-white'
+                                                : 'border-gray-300 dark:border-gray-600 hover:border-green-500'
                                                 }`}
                                         >
                                             {isHabitCompletedToday(habit) && <Check size={14} />}

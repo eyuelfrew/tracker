@@ -16,6 +16,79 @@ const journalSchema = Joi.object({
     isPrivate: Joi.boolean().default(true)
 });
 
+// @route   GET /api/journal/stats
+// @desc    Get journal statistics
+// @access  Private
+router.get('/stats', auth, async (req, res) => {
+    try {
+        const entries = await Journal.find({ userId: req.user._id });
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const thisWeek = new Date();
+        thisWeek.setDate(thisWeek.getDate() - 7);
+
+        const thisMonth = new Date();
+        thisMonth.setMonth(thisMonth.getMonth() - 1);
+
+        // Calculate writing streak
+        let currentStreak = 0;
+        const sortedEntries = entries
+            .map(entry => new Date(entry.createdAt))
+            .sort((a, b) => b.getTime() - a.getTime());
+
+        if (sortedEntries.length > 0) {
+            let checkDate = new Date();
+            checkDate.setHours(0, 0, 0, 0);
+
+            for (let i = 0; i < sortedEntries.length; i++) {
+                const entryDate = new Date(sortedEntries[i]);
+                entryDate.setHours(0, 0, 0, 0);
+
+                if (entryDate.getTime() === checkDate.getTime()) {
+                    currentStreak++;
+                    checkDate.setDate(checkDate.getDate() - 1);
+                } else if (entryDate.getTime() < checkDate.getTime()) {
+                    break;
+                }
+            }
+        }
+
+        // Mood analysis
+        const moodCounts = entries.reduce((acc, entry) => {
+            acc[entry.mood] = (acc[entry.mood] || 0) + 1;
+            return acc;
+        }, {});
+
+        const mostCommonMood = Object.keys(moodCounts).reduce((a, b) =>
+            moodCounts[a] > moodCounts[b] ? a : b, 'good'
+        );
+
+        const stats = {
+            totalEntries: entries.length,
+            entriesThisWeek: entries.filter(entry =>
+                new Date(entry.createdAt) >= thisWeek
+            ).length,
+            entriesThisMonth: entries.filter(entry =>
+                new Date(entry.createdAt) >= thisMonth
+            ).length,
+            currentStreak,
+            mostCommonMood,
+            moodDistribution: moodCounts,
+            averageWordsPerEntry: entries.length > 0
+                ? Math.round(entries.reduce((sum, entry) =>
+                    sum + entry.content.split(' ').length, 0) / entries.length)
+                : 0
+        };
+
+        res.json(stats);
+    } catch (error) {
+        console.error('Get journal stats error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 // @route   GET /api/journal
 // @desc    Get all journal entries for user
 // @access  Private
@@ -137,93 +210,6 @@ router.delete('/:id', auth, async (req, res) => {
         res.json({ message: 'Journal entry deleted successfully' });
     } catch (error) {
         console.error('Delete journal entry error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// @route   GET /api/journal/stats
-// @desc    Get journal statistics
-// @access  Private
-router.get('/stats', auth, async (req, res) => {
-    try {
-        const entries = await Journal.find({ userId: req.user._id });
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const thisWeek = new Date();
-        thisWeek.setDate(thisWeek.getDate() - 7);
-
-        const thisMonth = new Date();
-        thisMonth.setMonth(thisMonth.getMonth() - 1);
-
-        // Calculate writing streak
-        let currentStreak = 0;
-        if (entries.length > 0) {
-            // Get unique dates of entries
-            const uniqueEntryDates = [...new Set(entries.map(entry => {
-                const date = new Date(entry.createdAt);
-                return date.toISOString().split('T')[0]; // Get date string in YYYY-MM-DD format
-            }))].map(dateStr => new Date(dateStr))
-            .sort((a, b) => b.getTime() - a.getTime());
-
-            if (uniqueEntryDates.length > 0) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                
-                // Check if we wrote today
-                const firstEntryDate = new Date(uniqueEntryDates[0]);
-                firstEntryDate.setHours(0, 0, 0, 0);
-                
-                let expectedDate = new Date(today);
-                let i = 0;
-                
-                while (i < uniqueEntryDates.length) {
-                    const entryDate = new Date(uniqueEntryDates[i]);
-                    entryDate.setHours(0, 0, 0, 0);
-                    
-                    if (entryDate.getTime() === expectedDate.getTime()) {
-                        currentStreak++;
-                        expectedDate.setDate(expectedDate.getDate() - 1);
-                        i++;
-                    } else {
-                        // If the entry date is not the expected date, break the streak
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Mood analysis
-        const moodCounts = entries.reduce((acc, entry) => {
-            acc[entry.mood] = (acc[entry.mood] || 0) + 1;
-            return acc;
-        }, {});
-
-        const mostCommonMood = Object.keys(moodCounts).reduce((a, b) =>
-            moodCounts[a] > moodCounts[b] ? a : b, 'good'
-        );
-
-        const stats = {
-            totalEntries: entries.length,
-            entriesThisWeek: entries.filter(entry =>
-                new Date(entry.createdAt) >= thisWeek
-            ).length,
-            entriesThisMonth: entries.filter(entry =>
-                new Date(entry.createdAt) >= thisMonth
-            ).length,
-            currentStreak,
-            mostCommonMood,
-            moodDistribution: moodCounts,
-            averageWordsPerEntry: entries.length > 0
-                ? Math.round(entries.reduce((sum, entry) =>
-                    sum + entry.content.split(' ').length, 0) / entries.length)
-                : 0
-        };
-
-        res.json(stats);
-    } catch (error) {
-        console.error('Get journal stats error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
